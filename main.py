@@ -3,6 +3,7 @@ import base64
 import json
 import websockets
 import os
+import http
 from dotenv import load_dotenv
 from pharmacy_functions import FUNCTION_MAP
 
@@ -24,6 +25,17 @@ def sts_connect():
 def load_config():
     with open("config.json", "r") as f:
         return json.load(f)
+
+
+async def process_request(path, request_headers):
+    """
+    Handle Render health checks by returning 200 OK for HEAD/GET requests
+    that aren't WebSocket handshakes.
+    """
+    if "upgrade" not in request_headers.get("Connection", "").lower() or \
+       "websocket" not in request_headers.get("Upgrade", "").lower():
+        return http.HTTPStatus.OK, [], b"OK"
+    return None
 
 
 async def handle_barge_in(decoded, twilio_ws, streamsid):
@@ -168,8 +180,10 @@ async def twilio_handler(twilio_ws):
 
 
 async def main():
-    await websockets.serve(twilio_handler, "localhost", 5000)
-    print("Started server.")
+    # Update host to "0.0.0.0" and add process_request to handle health checks
+    port = int(os.getenv("PORT", 5000))
+    await websockets.serve(twilio_handler, "0.0.0.0", port, process_request=process_request)
+    print(f"Started server on 0.0.0.0:{port}")
     await asyncio.Future()
 
 
